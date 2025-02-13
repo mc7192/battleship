@@ -26,16 +26,29 @@ def create_window(surface):
     font = pygame.font.SysFont('comicsans', 60)
     label = font.render('Battleship', 1, (255,255,255)) 
     surface.blit(label, ((WINDOW_WIDTH - label.get_width()) // 2, 20))
+    font = pygame.font.SysFont('comicsans', 40)
+    label = font.render('Your board', 1, (255,255,255))
+    surface.blit(label, ((WINDOW_WIDTH - label.get_width()) // 2 - 400, 180))
+    font = pygame.font.SysFont('comicsans', 40)
+    label = font.render("Opponent's board", 1, (255,255,255))
+    surface.blit(label, ((WINDOW_WIDTH - label.get_width()) // 2 + 350, 180))
+
+def start_text(surface, text):
+    pygame.font.init()
+    font = pygame.font.SysFont('comicsans', 40)
+    label = font.render(text, 1, (255,255,255))
+    surface.blit(label, ((WINDOW_WIDTH - label.get_width()) // 2, 100))
+
 
 
 class Piece:
-    def __init__(self, name, orientation, x, y, color):
+    def __init__(self, name, orientation, x, y, color=(255,0,0)):
         self.name = name
         self.length = self.get_length(name)
         self.orientation = orientation
         self.x = x
         self.y = y
-        self.color = color 
+        self.color = color
     
     def get_length(self, name):
         for piece in battleship_pieces:
@@ -51,45 +64,55 @@ class Board:
         self.player = player
 
     def add_piece(self, piece):
+        """Attempts to add a ship to the board if all locations are valid."""
         locations = self.get_locations(piece, piece.x, piece.y)
-        for x, y in locations:
-            self.board[x][y] = piece.color
-        self.pieces.append(piece)
+        if not locations or any(self.board[col][row] != (0, 0, 0) for col, row in locations):
+            return False  
+
+        for col, row in locations:
+            self.board[col][row] = piece.color  
+
+        self.pieces.append(piece) 
+        return True  
 
     def draw_board(self, surface):
-        """Draws the game board grid for the player (bottom-left) and AI (bottom-right)."""
-
-        # Define Y offset to position both grids at the bottom
-        grid_y_offset = WINDOW_HEIGHT - BOARD_HEIGHT - 50  # Moves it upwards
-
+        grid_y_offset = WINDOW_HEIGHT - BOARD_HEIGHT - 50  
         if self.player:
-            # Bottom-left grid offset
-            grid_x_offset = 50  # Left grid position
+            grid_x_offset = 50  
 
         else:
-            # Bottom-right grid offset
-            grid_x_offset = WINDOW_WIDTH - BOARD_WIDTH - 50  # Moves the grid to the right
+            grid_x_offset = WINDOW_WIDTH - BOARD_WIDTH - 50 
 
         # Draw vertical grid lines
         for i in range(GRID_SIZE + 1):  # +1 to draw the last line
             pygame.draw.line(
                 surface,
-                (255, 255, 255),  # White lines
-                (grid_x_offset + i * CELL_SIZE, grid_y_offset),  # Start position
-                (grid_x_offset + i * CELL_SIZE, grid_y_offset + BOARD_HEIGHT)  # End position
+                (255, 255, 255),  
+                (grid_x_offset + i * CELL_SIZE, grid_y_offset), 
+                (grid_x_offset + i * CELL_SIZE, grid_y_offset + BOARD_HEIGHT)  
             )
 
-        # Draw horizontal grid lines
         for i in range(GRID_SIZE + 1):  
             pygame.draw.line(
                 surface,
-                (255, 255, 255),  # White lines
-                (grid_x_offset, grid_y_offset + i * CELL_SIZE),  # Start position
-                (grid_x_offset + BOARD_WIDTH, grid_y_offset + i * CELL_SIZE)  # End position
+                (255, 255, 255),  
+                (grid_x_offset, grid_y_offset + i * CELL_SIZE),  
+                (grid_x_offset + BOARD_WIDTH, grid_y_offset + i * CELL_SIZE) 
             )
         
-
-        
+        if self.player:
+            for col in range(len(self.board)):  
+                for row in range(len(self.board[col])): 
+                    if self.board[col][row] != (0, 0, 0):  
+                        pygame.draw.rect(
+                            surface, 
+                            self.board[col][row], 
+                            (
+                            (grid_x_offset + col * CELL_SIZE, 
+                            grid_y_offset + row * CELL_SIZE, 
+                            CELL_SIZE, CELL_SIZE),
+                            )
+                        )
 
     def get_grid_position(self, mouse_x, mouse_y):
         """Converts mouse coordinates to grid position for ship placement."""
@@ -132,6 +155,9 @@ class Board:
                 elif orientation == "up":
                     highlight_col = col
                     highlight_row = row - i
+                else:
+                    highlight_col = col
+                    highlight_row = row 
 
                 # Ensure the highlight is within board boundaries
                 if 0 <= highlight_col < GRID_SIZE and 0 <= highlight_row < GRID_SIZE:
@@ -143,45 +169,22 @@ class Board:
                         CELL_SIZE, CELL_SIZE),
                         3  # Border thickness
                     )
-
-    def valid_space(self, x, y):
-        """Checks if (x, y) is inside the board and unoccupied."""
-        if x < 0 or x >= len(self.board) or y < 0 or y >= len(self.board[0]):
-            return False
-
-        if self.board[x][y] != (0, 0, 0):  
-            return False
-        
-        return True
-    
+   
     def get_locations(self, piece, x, y):
         locations = []
 
         if piece.orientation == "left":
-            for i in range(piece.length):
-                if self.valid_space(x - i, y):
-                    locations.append((x - i, y))
-                else:
-                    break
-        if piece.orientation == "right":
-            for i in range(piece.length):
-                if self.valid_space(x + i, y):
-                    locations.append((x + i, y))
-                else:
-                    break
-        if piece.orientation == "up":
-            for i in range(piece.length):
-                if self.valid_space(x, y - i):
-                    locations.append((x, y - i))
-                else:
-                    break
-        if piece.orientation == "down":
-            for i in range(piece.length):
-                if self.valid_space(x, y + i):
-                    locations.append((x, y + i))
-                else:
-                    break
-
+            locations = [(x - i, y) for i in range(piece.length)]
+        elif piece.orientation == "right":
+            locations = [(x + i, y) for i in range(piece.length)]
+        elif piece.orientation == "up":
+            locations = [(x, y - i) for i in range(piece.length)]
+        elif piece.orientation == "down":
+            locations = [(x, y + i) for i in range(piece.length)]
+        
+        if any(pos[0] < 0 or pos[0] >= len(self.board) or pos[1] < 0 or pos[1] >= len(self.board[0]) for pos in locations):
+            return []  
+        
         return locations
 
 
@@ -189,12 +192,25 @@ def start_game(surface):
     pygame.init()
     board1 = Board()
     board2 = Board(player=False)
-    index = 0
-    current_orientation = "right"
+    index1 = 0
+    index2 = 0
+    orientations = ["left", "right", "up", "down"]
+    current_orientation2 = "right"
 
-    while index < len(battleship_pieces):
-        current_length = battleship_pieces[index]["length"]
-        create_window(surface)
+    #ai ship placement
+    while index1 < len(battleship_pieces):
+        x = random.randint(0, 9)
+        y = random.randint(0, 9)
+        orientation = random.choice(orientations)
+        current_piece = Piece(battleship_pieces[index1]["name"], orientation, x, y)
+        if board2.add_piece(current_piece):
+            index1 += 1
+
+
+    while index2 < len(battleship_pieces):
+        current_length = battleship_pieces[index2]["length"] 
+        create_window(surface)    
+        start_text(surface, "Please choose your ship positions")
         board1.draw_board(surface)
         board2.draw_board(surface)
 
@@ -207,38 +223,56 @@ def start_game(surface):
                 return  
 
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:
-                if current_orientation == "right":
-                    current_orientation = "down"
-                elif current_orientation == "down":
-                    current_orientation = "left"
-                elif current_orientation == "left":
-                    current_orientation = "up"
+                if current_orientation2 == "right":
+                    current_orientation2 = "down"
+                elif current_orientation2 == "down":
+                    current_orientation2 = "left"
+                elif current_orientation2 == "left":
+                    current_orientation2 = "up"
                 else:
-                    current_orientation = "right"
+                    current_orientation2 = "right"
 
             if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 grid_pos = board1.get_grid_position(mouse_x, mouse_y)  # Get updated grid position
                 if grid_pos:
                     row, col = grid_pos
                     current_piece = Piece(
-                        battleship_pieces[index]["name"], current_orientation, col, row, (255, 0, 0)
+                        battleship_pieces[index2]["name"], current_orientation2, col, row, (255, 0, 0)
                     )
-                    board1.add_piece(current_piece)  # Ensure valid placement
-                    index += 1  # Move to next ship
-        
-        board1.highlight_cell(surface, mouse_x, mouse_y, current_orientation, current_length)
+                    if board1.add_piece(current_piece):
+                        index2 += 1  # Move to the next ship
+                    else: 
+                        print("try again")
+
+        board1.highlight_cell(surface, mouse_x, mouse_y, current_orientation2, current_length)
         pygame.display.update()  # Refresh screen
 
-    
+    return board1, board2 
 
 def main(surface, board1, board2):
-    pass
+    pygame.init()
+    run = True
+
+    while run:
+        create_window(surface)
+        start_text(surface, "Please choose your targets")
+        board1.draw_board(surface)
+        board2.draw_board(surface)
+        col, row = pygame.mouse.get_pos()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                return  
+
+        board2.highlight_cell(win, col, row, "none", 1)
+        pygame.display.update()
 
 if __name__ == "__main__":
     pygame.init()
     win = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     pygame.display.set_caption("Battleship")
-    start_game(win)
+    board1, board2 = start_game(win)
+    main(win, board1, board2)
 
 
 
