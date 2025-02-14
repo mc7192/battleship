@@ -1,5 +1,6 @@
 import pygame
 import random
+from pprint import pprint
 
 battleship_pieces = [
     {"name": "Carrier", "length": 5,},
@@ -39,6 +40,18 @@ def start_text(surface, text):
     label = font.render(text, 1, (255,255,255))
     surface.blit(label, ((WINDOW_WIDTH - label.get_width()) // 2, 100))
 
+def draw_text_middle(text, size, color, surface):
+    font = pygame.font.SysFont('comicsans', size, bold=True)
+    label = font.render(text, 1, color)
+
+    # Calculate center position
+    text_x = (WINDOW_WIDTH - label.get_width()) // 2
+    text_y = (WINDOW_HEIGHT - label.get_height()) // 2
+    if "Sunk" in text:
+        text_y += 80
+
+    # Draw text in the center of the screen
+    surface.blit(label, (text_x, text_y))
 
 
 class Piece:
@@ -60,8 +73,9 @@ class Piece:
 class Board:
     def __init__ (self, player = True):
         self.board = [[(0,0,0) for i in range(GRID_SIZE)] for j in range(GRID_SIZE)]
-        self.pieces = []  # List of Piece objects
+        self.pieces = {}  # List of Piece objects : locations
         self.player = player
+        self.hit = [] #tuple of positions 
 
     def add_piece(self, piece):
         """Attempts to add a ship to the board if all locations are valid."""
@@ -72,10 +86,49 @@ class Board:
         for col, row in locations:
             self.board[col][row] = piece.color  
 
-        self.pieces.append(piece) 
+        if piece.name not in self.pieces:
+            self.pieces[piece.name] = locations
         return True  
+    
+    def attack(self, x, y, board, surface):
+        if self.player:
+            row, col = board.get_grid_position(x, y)
+        else: 
+            while True:
+                row = random.randint(0, 9) 
+                col = random.randint(0, 9)
+                if (col, row) not in board.hit:
+                    break
 
-    def draw_board(self, surface):
+        if board.board[col][row] == (0,0,0):
+            board.board[col][row] = (100, 100, 100)
+            board.hit.append((col, row))
+            if self.player:
+                draw_text_middle("miss!", 50, (255,255,255), surface)
+            return False
+                    
+        else:
+            board.board[col][row] = (255, 0, 255)
+
+            for name, locations in board.pieces.items():
+                if (col, row) in locations:
+                    locations.remove((col, row))
+                    if self.player:
+                        draw_text_middle("hit!", 50, (255,255,255), surface)
+                        pygame.display.update()
+                        pygame.time.delay(500)
+                    if not locations:
+                        del board.pieces[name]
+                        if self.player:
+                            draw_text_middle(f"Sunk {name}", 60, (0,0,200), surface)
+                            pygame.display.update()
+                            pygame.time.delay(500)
+                        break
+        
+        return True
+    
+
+    def draw_board(self, surface, grid_only=False):
         grid_y_offset = WINDOW_HEIGHT - BOARD_HEIGHT - 50  
         if self.player:
             grid_x_offset = 50  
@@ -100,19 +153,52 @@ class Board:
                 (grid_x_offset + BOARD_WIDTH, grid_y_offset + i * CELL_SIZE) 
             )
         
-        if self.player:
+        if not grid_only:
             for col in range(len(self.board)):  
                 for row in range(len(self.board[col])): 
                     if self.board[col][row] != (0, 0, 0):  
                         pygame.draw.rect(
                             surface, 
                             self.board[col][row], 
+                                (
+                                (grid_x_offset + col * CELL_SIZE, 
+                                grid_y_offset + row * CELL_SIZE, 
+                                CELL_SIZE, CELL_SIZE),
+                                )
+                            )
+                    
+    def hide_board(self, surface):
+        if not self.player:
+            grid_y_offset = WINDOW_HEIGHT - BOARD_HEIGHT - 50 
+            grid_x_offset = WINDOW_WIDTH - BOARD_WIDTH - 50 
+            for col in range(len(self.board)):  
+                for row in range(len(self.board[col])): 
+                    if self.board[col][row] == (255, 0, 0):
+                        pygame.draw.rect(
+                        surface, 
+                        (0,0,0), 
                             (
                             (grid_x_offset + col * CELL_SIZE, 
                             grid_y_offset + row * CELL_SIZE, 
                             CELL_SIZE, CELL_SIZE),
                             )
                         )
+            #redraw grid
+            for i in range(GRID_SIZE + 1):  # +1 to draw the last line
+                pygame.draw.line(
+                    surface,
+                    (255, 255, 255),  
+                    (grid_x_offset + i * CELL_SIZE, grid_y_offset), 
+                    (grid_x_offset + i * CELL_SIZE, grid_y_offset + BOARD_HEIGHT)  
+                )
+
+            for i in range(GRID_SIZE + 1):  
+                pygame.draw.line(
+                    surface,
+                    (255, 255, 255),  
+                    (grid_x_offset, grid_y_offset + i * CELL_SIZE),  
+                    (grid_x_offset + BOARD_WIDTH, grid_y_offset + i * CELL_SIZE) 
+                )
 
     def get_grid_position(self, mouse_x, mouse_y):
         """Converts mouse coordinates to grid position for ship placement."""
@@ -213,6 +299,8 @@ def start_game(surface):
         start_text(surface, "Please choose your ship positions")
         board1.draw_board(surface)
         board2.draw_board(surface)
+        board1.draw_board(surface, grid_only=True)
+        board2.hide_board(surface)
 
         # Get mouse position
         mouse_x, mouse_y = pygame.mouse.get_pos()
@@ -252,20 +340,54 @@ def start_game(surface):
 def main(surface, board1, board2):
     pygame.init()
     run = True
+    current_player = board1
+    opponent = board2
 
     while run:
         create_window(surface)
         start_text(surface, "Please choose your targets")
         board1.draw_board(surface)
         board2.draw_board(surface)
-        col, row = pygame.mouse.get_pos()
+        board1.draw_board(surface, grid_only=True)
+        board2.hide_board(surface)
+        x, y = pygame.mouse.get_pos()
+
+        if not current_player.player:
+            pygame.time.delay(200)
+            hit = current_player.attack(x, y, opponent, surface)
+
+            if not hit:
+                current_player, opponent = opponent, current_player
+                    
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 return  
+            
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+    
+                if current_player.player:
+                    hit = current_player.attack(x, y, opponent, surface)
+                    
+                    if not hit:
+                        pygame.time.delay(200)
+                        current_player, opponent = opponent, current_player
+                    
 
-        board2.highlight_cell(win, col, row, "none", 1)
+        if not opponent.pieces:
+            if current_player == board1:
+                draw_text_middle("You win!", 50, (255,255,255), surface)
+            else:
+                draw_text_middle("You lose!", 50, (255,255,255), surface)
+
+            pygame.display.update()
+            pygame.time.delay(1000)
+            pygame.quit()
+        
+        board2.highlight_cell(win, x, y, "none", 1)
         pygame.display.update()
+        
 
 if __name__ == "__main__":
     pygame.init()
