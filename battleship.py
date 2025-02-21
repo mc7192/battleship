@@ -1,6 +1,6 @@
 import pygame
 import random
-from pprint import pprint
+
 
 battleship_pieces = [
     {"name": "Carrier", "length": 5,},
